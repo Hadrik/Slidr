@@ -1,0 +1,10 @@
+# ESP-IDF
+build/
+managed_components/
+
+# Editor
+.vscode/
+
+# System
+.DS_Store
+Thumbs.db
