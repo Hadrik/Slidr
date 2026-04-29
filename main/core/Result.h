@@ -15,7 +15,14 @@ enum class ErrorCode {
     ValidationFailed,
     NotFound,
     RestartRequired,
-    InternalError
+    InternalError,
+    QueueFull,
+    Timeout,
+    Busy,
+    FileSystemUnavailable,
+    FileSystemError,
+    FileNotFound,
+    PathNotAllowed
 };
 
 inline const char* ToString(ErrorCode code) {
@@ -36,6 +43,20 @@ inline const char* ToString(ErrorCode code) {
             return "restart_required";
         case ErrorCode::InternalError:
             return "internal_error";
+        case ErrorCode::QueueFull:
+            return "queue_full";
+        case ErrorCode::Timeout:
+            return "timeout";
+        case ErrorCode::Busy:
+            return "busy";
+        case ErrorCode::FileSystemUnavailable:
+            return "filesystem_unavailable";
+        case ErrorCode::FileSystemError:
+            return "filesystem_error";
+        case ErrorCode::FileNotFound:
+            return "file_not_found";
+        case ErrorCode::PathNotAllowed:
+            return "path_not_allowed";
     }
     return "unknown";
 }

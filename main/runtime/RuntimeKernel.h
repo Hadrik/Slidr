@@ -8,6 +8,7 @@
 #include "communication/MessageGateway.h"
 #include "config/ConfigEngine.h"
 #include "core/Result.h"
+#include "services/FilesystemService.h"
 
 namespace slidr::runtime {
 
@@ -22,6 +23,7 @@ private:
 
     communication::MessageGateway _gateway;
     config::ConfigEngine _config_engine;
+    services::FilesystemService _filesystem;
     bool _initialized = false;
 };
 

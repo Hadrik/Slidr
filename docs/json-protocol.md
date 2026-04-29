@@ -55,6 +55,23 @@ Response payload:
 }
 ```
 
+### heartbeat
+Request payload:
+
+```json
+{}
+```
+
+Response payload:
+
+```json
+{
+  "alive": true,
+  "filesystem_ready": true,
+  "pending_restart_components": []
+}
+```
+
 ### config.get
 Request payload:
 
@@ -118,6 +135,77 @@ Response payload:
 
 If a field is restart-required, status is restart_required and payload includes pending_restart_components.
 
+### file.list
+Request payload:
+
+```json
+{
+  "path": "/"
+}
+```
+
+`path` is optional. `/` returns virtual root entries (`/config`, `/images`).
+
+Response payload:
+
+```json
+{
+  "path": "/",
+  "count": 2,
+  "entries": [
+    {
+      "path": "/config",
+      "size": 0,
+      "modified_ms": 0,
+      "is_directory": true
+    }
+  ]
+}
+```
+
+### file.stat
+Request payload:
+
+```json
+{
+  "path": "/config/config.json"
+}
+```
+
+Response payload:
+
+```json
+{
+  "path": "/config/config.json",
+  "size": 412,
+  "modified_ms": 1713976322000,
+  "is_directory": false
+}
+```
+
+### file.delete
+Request payload:
+
+```json
+{
+  "path": "/images/old.bmp"
+}
+```
+
+Response payload:
+
+```json
+{
+  "path": "/images/old.bmp",
+  "deleted": true
+}
+```
+
+### Path policy
+- Allowed roots are `/config` and `/images` only.
+- Paths outside allowed roots are rejected.
+- Directory deletion is rejected by `file.delete`.
+
 ## Errors
 
 error_code values currently include:
@@ -128,5 +216,12 @@ error_code values currently include:
 - not_found
 - restart_required
 - internal_error
+- queue_full
+- timeout
+- busy
+- filesystem_unavailable
+- filesystem_error
+- file_not_found
+- path_not_allowed
 
 Clients should always branch on status and error_code, not only message text.

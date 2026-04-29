@@ -2,9 +2,11 @@ set(app_sources
     "main.cpp"
     "app/Application.cpp"
     "runtime/RuntimeKernel.cpp"
+    "communication/JsonLineTransport.cpp"
     "communication/JsonProtocol.cpp"
     "communication/MessageGateway.cpp"
     "config/ConfigEngine.cpp"
+    "services/FilesystemService.cpp"
 )
 
 idf_component_register(

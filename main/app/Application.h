@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "communication/JsonLineTransport.h"
 #include "core/Result.h"
 #include "runtime/RuntimeKernel.h"
 
@@ -19,6 +20,7 @@ public:
 
 private:
     runtime::RuntimeKernel _kernel;
+    communication::JsonLineTransport _transport;
 };
 
 }  // namespace slidr::app

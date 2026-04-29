@@ -1,6 +1,13 @@
 #include "runtime/RuntimeKernel.h"
 
+#include <vector>
+
 #include "config/ConfigSchema.h"
+#include "esp_log.h"
+
+namespace {
+constexpr const char* kTag = "RuntimeKernel";
+}
 
 namespace slidr::runtime {
 
@@ -11,6 +18,11 @@ void RuntimeKernel::initialize() {
 
     register_default_schemas();
     register_default_handlers();
+
+    const core::Result fs_result = _filesystem.initialize();
+    if (!fs_result.ok()) {
+        ESP_LOGW(kTag, "Filesystem init failed: %s", fs_result.message.c_str());
+    }
 
     static constexpr const char* kBootstrapConfig = R"json(
 {
@@ -97,6 +109,18 @@ void RuntimeKernel::register_default_handlers() {
         return core::Result::Success();
     });
 
+    _gateway.register_handler("heartbeat", [this](const JsonObjectConst&, JsonDocument& response_payload) {
+        response_payload["alive"] = true;
+        response_payload["filesystem_ready"] = _filesystem.ready();
+
+        JsonArray pending = response_payload["pending_restart_components"].to<JsonArray>();
+        for (const auto& id : _config_engine.pending_restart_components()) {
+            pending.add(id);
+        }
+
+        return core::Result::Success();
+    });
+
     _gateway.register_handler("config.get", [this](const JsonObjectConst&, JsonDocument& response_payload) {
         JsonDocument desired;
         core::Result result = _config_engine.get_desired_config(desired);
@@ -164,6 +188,66 @@ void RuntimeKernel::register_default_handlers() {
         }
 
         return result;
+    });
+
+    _gateway.register_handler("file.list", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        const std::string path = payload["path"] | "/";
+
+        std::vector<services::FileMetadata> entries;
+        const core::Result result = _filesystem.list(path, entries);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["path"] = path;
+        response_payload["count"] = static_cast<uint32_t>(entries.size());
+
+        JsonArray json_entries = response_payload["entries"].to<JsonArray>();
+        for (const auto& entry : entries) {
+            JsonObject item = json_entries.add<JsonObject>();
+            item["path"] = entry.path;
+            item["size"] = static_cast<uint32_t>(entry.size);
+            item["modified_ms"] = entry.modified_ms;
+            item["is_directory"] = entry.is_directory;
+        }
+
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.stat", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["path"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.stat requires string field 'path'");
+        }
+
+        const std::string path = payload["path"].as<std::string>();
+
+        services::FileMetadata metadata;
+        const core::Result result = _filesystem.stat(path, metadata);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["path"] = metadata.path;
+        response_payload["size"] = static_cast<uint32_t>(metadata.size);
+        response_payload["modified_ms"] = metadata.modified_ms;
+        response_payload["is_directory"] = metadata.is_directory;
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.delete", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["path"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.delete requires string field 'path'");
+        }
+
+        const std::string path = payload["path"].as<std::string>();
+        const core::Result result = _filesystem.delete_file(path);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["path"] = path;
+        response_payload["deleted"] = true;
+        return core::Result::Success();
     });
 }
 
