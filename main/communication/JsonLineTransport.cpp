@@ -41,6 +41,12 @@ core::Result JsonLineTransport::begin() {
         }
     }
 
+    ESP_LOGI(kTag, "JsonLineTransport initialized with config: max_line_length=%zu, max_incoming_queue=%zu, max_outgoing_queue=%zu, max_rx_bytes_per_poll=%zu, partial_line_timeout_ms=%u",
+        _config.max_line_length,
+        _config.max_incoming_queue,
+        _config.max_outgoing_queue,
+        _config.max_rx_bytes_per_poll,
+        _config.partial_line_timeout_ms);
     _initialized = true;
     return core::Result::Success();
 }
@@ -112,6 +118,7 @@ void JsonLineTransport::drain_rx() {
             if (c == '\n') {
                 if (!_rx_buffer.empty()) {
                     if (_incoming_lines.size() < _config.max_incoming_queue) {
+                        ESP_LOGI(kTag, "Received line: '%s'", _rx_buffer.c_str());
                         _incoming_lines.push_back(_rx_buffer);
                     } else {
                         ESP_LOGW(kTag, "Incoming queue full, dropping line");

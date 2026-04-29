@@ -29,7 +29,7 @@ core::Result MessageGateway::handle_incoming_line(const std::string& line, std::
                     core::ErrorCode::UnknownCommand,
                     "No handler registered for message kind '" + kind + "'");
             } else {
-                JsonObjectConst payload = envelope["payload"].is<JsonObject>()
+                JsonObjectConst payload = envelope["payload"].is<JsonObjectConst>()
                     ? envelope["payload"].as<JsonObjectConst>()
                     : JsonObjectConst();
                 result = it->second(payload, response_payload);

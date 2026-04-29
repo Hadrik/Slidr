@@ -1,6 +1,7 @@
 #include "communication/JsonProtocol.h"
 
 #include "esp_timer.h"
+#include "esp_log.h"
 
 namespace slidr::communication {
 
@@ -9,6 +10,7 @@ core::Result JsonProtocol::parse_line(const std::string& line, JsonDocument& out
 
     const DeserializationError error = deserializeJson(out_document, line);
     if (error) {
+        ESP_LOGW("JsonProtocol", "JSON parse error. Line: '%s', Error: %s", line.c_str(), error.c_str());
         return core::Result::Failure(
             core::ErrorCode::InvalidJson,
             std::string("Failed to parse JSON line: ") + error.c_str());
@@ -34,7 +36,7 @@ core::Result JsonProtocol::validate_envelope(const JsonObjectConst& envelope) {
         return core::Result::Failure(core::ErrorCode::MissingField, "Missing required string field 'kind'");
     }
 
-    if (!envelope["payload"].is<JsonObject>() && !envelope["payload"].isNull()) {
+    if (!envelope["payload"].is<JsonObjectConst>() && !envelope["payload"].isNull()) {
         return core::Result::Failure(core::ErrorCode::ValidationFailed, "Field 'payload' must be an object or null");
     }
 

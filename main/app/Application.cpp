@@ -21,13 +21,13 @@ void Application::begin() {
 
     std::string response;
     const std::string ping_request =
-        "{\"protocol_version\":\"1.0\",\"message_id\":\"boot_ping_1\",\"kind\":\"ping\",\"payload\":{}}\n";
+        "{\"protocol_version\":\"1.0\",\"message_id\":\"boot_ping_1\",\"kind\":\"ping\",\"payload\":null}\n";
 
     const core::Result result = _kernel.handle_line(ping_request, response);
     if (result.ok()) {
         ESP_LOGI(kTag, "Self-test ping succeeded: %s", response.c_str());
     } else {
-        ESP_LOGW(kTag, "Self-test ping failed: %s", result.message.c_str());
+        ESP_LOGW(kTag, "Self-test ping failed: [%s] %s", core::ToString(result.code), result.message.c_str());
     }
 }
 

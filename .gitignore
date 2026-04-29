@@ -1,9 +1,14 @@
 # ESP-IDF
 build/
 managed_components/
+sdkconfig.old
 
 # Editor
 .vscode/
+
+# Testing
+msg.json
+send.ahk2
 
 # System
 .DS_Store
