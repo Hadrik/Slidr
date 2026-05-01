@@ -34,6 +34,8 @@ public:
     core::Result read_text_file(const std::string& user_path, std::string& out_content) const;
     core::Result write_text_file_atomic(const std::string& user_path, const std::string& content) const;
 
+    core::Result resolve_user_path(const std::string& user_path, std::string& out_real_path) const;
+
 private:
     core::Result resolve_path(const std::string& user_path, std::string& out_real_path) const;
 

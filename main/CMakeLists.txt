@@ -5,6 +5,7 @@ set(app_sources
     "communication/JsonLineTransport.cpp"
     "communication/JsonProtocol.cpp"
     "communication/MessageGateway.cpp"
+    "communication/FileTransferManager.cpp"
     "config/ConfigEngine.cpp"
     "services/FilesystemService.cpp"
 )
@@ -12,7 +13,7 @@ set(app_sources
 idf_component_register(
     SRCS ${app_sources}
     INCLUDE_DIRS "."
-    REQUIRES arduinojson esp_timer
+    REQUIRES arduinojson esp_timer mbedtls esp_hw_support
 )
 
 target_compile_features(${COMPONENT_LIB} PRIVATE cxx_std_20)

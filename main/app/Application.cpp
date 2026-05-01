@@ -19,6 +19,13 @@ void Application::begin() {
         ESP_LOGW(kTag, "Transport init failed: %s", transport_result.message.c_str());
     }
 
+    _kernel.set_event_sink([this](std::string line) {
+        const core::Result queue_result = _transport.queue_outgoing_line(std::move(line));
+        if (!queue_result.ok()) {
+            ESP_LOGW(kTag, "Async event queueing failed: %s", queue_result.message.c_str());
+        }
+    });
+
     std::string response;
     const std::string ping_request =
         "{\"protocol_version\":\"1.0\",\"message_id\":\"boot_ping_1\",\"kind\":\"ping\",\"payload\":null}\n";

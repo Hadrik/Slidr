@@ -24,6 +24,15 @@ void RuntimeKernel::initialize() {
         ESP_LOGW(kTag, "Filesystem init failed: %s", fs_result.message.c_str());
     }
 
+    const core::Result transfer_result = _transfer_manager.initialize(_filesystem);
+    if (!transfer_result.ok()) {
+        ESP_LOGW(kTag, "Transfer manager init failed: %s", transfer_result.message.c_str());
+    }
+
+    if (_event_sink) {
+        _transfer_manager.set_event_sink(_event_sink);
+    }
+
     static constexpr const char* kBootstrapConfig = R"json(
 {
   "components": [
@@ -55,6 +64,11 @@ void RuntimeKernel::initialize() {
 
 core::Result RuntimeKernel::handle_line(const std::string& line, std::string& out_line) {
     return _gateway.handle_incoming_line(line, out_line);
+}
+
+void RuntimeKernel::set_event_sink(std::function<void(std::string)> sink) {
+    _event_sink = std::move(sink);
+    _transfer_manager.set_event_sink(_event_sink);
 }
 
 void RuntimeKernel::register_default_schemas() {
@@ -247,6 +261,160 @@ void RuntimeKernel::register_default_handlers() {
 
         response_payload["path"] = path;
         response_payload["deleted"] = true;
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.upload.start", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["path"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.upload.start requires string field 'path'");
+        }
+        if (!payload["total_size"].is<uint32_t>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.upload.start requires numeric field 'total_size'");
+        }
+
+        const std::string path = payload["path"].as<std::string>();
+        const std::size_t total_size = payload["total_size"].as<uint32_t>();
+        const std::size_t chunk_size = payload["chunk_size"] | 0;
+
+        communication::FileTransferManager::UploadStartInfo info;
+        const core::Result result = _transfer_manager.begin_upload(path, total_size, chunk_size, info);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["session_id"] = info.session_id;
+        response_payload["chunk_size"] = static_cast<uint32_t>(info.chunk_size);
+        response_payload["total_size"] = static_cast<uint32_t>(info.total_size);
+        response_payload["expected_chunks"] = static_cast<uint32_t>(info.expected_chunks);
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.upload.chunk", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["session_id"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.upload.chunk requires string field 'session_id'");
+        }
+        if (!payload["index"].is<uint32_t>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.upload.chunk requires numeric field 'index'");
+        }
+        if (!payload["data_base64"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.upload.chunk requires string field 'data_base64'");
+        }
+        if (!payload["chunk_crc32"].is<uint32_t>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.upload.chunk requires numeric field 'chunk_crc32'");
+        }
+
+        const std::string session_id = payload["session_id"].as<std::string>();
+        const std::size_t index = payload["index"].as<uint32_t>();
+        const std::string data_base64 = payload["data_base64"].as<std::string>();
+        const uint32_t chunk_crc32 = payload["chunk_crc32"].as<uint32_t>();
+
+        communication::FileTransferManager::UploadChunkInfo info;
+        const core::Result result = _transfer_manager.accept_upload_chunk(session_id, index, data_base64, chunk_crc32, info);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["bytes_received"] = static_cast<uint32_t>(info.bytes_received);
+        response_payload["total_size"] = static_cast<uint32_t>(info.total_size);
+        response_payload["next_index"] = static_cast<uint32_t>(info.next_index);
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.upload.finish", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["session_id"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.upload.finish requires string field 'session_id'");
+        }
+
+        const std::string session_id = payload["session_id"].as<std::string>();
+        const uint32_t total_crc32 = payload["total_crc32"] | 0;
+
+        const core::Result result = _transfer_manager.finish_upload(session_id, total_crc32);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["session_id"] = session_id;
+        response_payload["completed"] = true;
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.upload.cancel", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["session_id"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.upload.cancel requires string field 'session_id'");
+        }
+
+        const std::string session_id = payload["session_id"].as<std::string>();
+        const core::Result result = _transfer_manager.cancel_upload(session_id);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["session_id"] = session_id;
+        response_payload["cancelled"] = true;
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.download.start", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["path"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.download.start requires string field 'path'");
+        }
+
+        const std::string path = payload["path"].as<std::string>();
+        const std::size_t chunk_size = payload["chunk_size"] | 0;
+
+        communication::FileTransferManager::DownloadStartInfo info;
+        const core::Result result = _transfer_manager.begin_download(path, chunk_size, info);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["session_id"] = info.session_id;
+        response_payload["chunk_size"] = static_cast<uint32_t>(info.chunk_size);
+        response_payload["total_size"] = static_cast<uint32_t>(info.total_size);
+        response_payload["total_chunks"] = static_cast<uint32_t>(info.total_chunks);
+        response_payload["total_crc32"] = info.total_crc32;
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.download.chunk", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["session_id"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.download.chunk requires string field 'session_id'");
+        }
+        if (!payload["index"].is<uint32_t>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.download.chunk requires numeric field 'index'");
+        }
+
+        const std::string session_id = payload["session_id"].as<std::string>();
+        const std::size_t index = payload["index"].as<uint32_t>();
+
+        communication::FileTransferManager::DownloadChunkInfo info;
+        const core::Result result = _transfer_manager.get_download_chunk(session_id, index, info);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["session_id"] = session_id;
+        response_payload["index"] = static_cast<uint32_t>(info.chunk_index);
+        response_payload["chunk_size"] = static_cast<uint32_t>(info.chunk_size);
+        response_payload["chunk_crc32"] = info.chunk_crc32;
+        response_payload["is_last"] = info.is_last;
+        response_payload["data_base64"] = info.chunk_base64;
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("file.download.finish", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!payload["session_id"].is<const char*>()) {
+            return core::Result::Failure(core::ErrorCode::MissingField, "file.download.finish requires string field 'session_id'");
+        }
+
+        const std::string session_id = payload["session_id"].as<std::string>();
+        const core::Result result = _transfer_manager.finish_download(session_id);
+        if (!result.ok()) {
+            return result;
+        }
+
+        response_payload["session_id"] = session_id;
+        response_payload["completed"] = true;
         return core::Result::Success();
     });
 }

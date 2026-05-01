@@ -22,7 +22,12 @@ enum class ErrorCode {
     FileSystemUnavailable,
     FileSystemError,
     FileNotFound,
-    PathNotAllowed
+    PathNotAllowed,
+    TransferSessionNotFound,
+    TransferCrcMismatch,
+    TransferOutOfOrder,
+    TransferSizeMismatch,
+    TransferDecodeFailed
 };
 
 inline const char* ToString(ErrorCode code) {
@@ -57,6 +62,16 @@ inline const char* ToString(ErrorCode code) {
             return "file_not_found";
         case ErrorCode::PathNotAllowed:
             return "path_not_allowed";
+        case ErrorCode::TransferSessionNotFound:
+            return "transfer_session_not_found";
+        case ErrorCode::TransferCrcMismatch:
+            return "transfer_crc_mismatch";
+        case ErrorCode::TransferOutOfOrder:
+            return "transfer_out_of_order";
+        case ErrorCode::TransferSizeMismatch:
+            return "transfer_size_mismatch";
+        case ErrorCode::TransferDecodeFailed:
+            return "transfer_decode_failed";
     }
     return "unknown";
 }

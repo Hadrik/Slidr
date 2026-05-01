@@ -9,6 +9,8 @@
 #include <string>
 
 #include "core/Result.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 namespace slidr::communication {
 
@@ -45,6 +47,8 @@ private:
 
     std::string _active_tx_line {};
     std::size_t _active_tx_offset = 0;
+
+    SemaphoreHandle_t _outgoing_mutex = nullptr;
 
     static Config _default_config() { return {}; }; // GCC bug 36684
 };

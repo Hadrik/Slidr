@@ -264,6 +264,14 @@ core::Result FilesystemService::write_text_file_atomic(const std::string& user_p
     return core::Result::Success();
 }
 
+core::Result FilesystemService::resolve_user_path(const std::string& user_path, std::string& out_real_path) const {
+    if (!_ready) {
+        return core::Result::Failure(core::ErrorCode::FileSystemUnavailable, "Filesystem not initialized");
+    }
+
+    return resolve_path(user_path, out_real_path);
+}
+
 core::Result FilesystemService::resolve_path(const std::string& user_path, std::string& out_real_path) const {
     const std::string sanitized = sanitize_user_path(user_path);
     if (!is_allowed_user_path(sanitized)) {

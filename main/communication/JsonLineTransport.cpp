@@ -25,6 +25,11 @@ core::Result JsonLineTransport::begin() {
         return core::Result::Success();
     }
 
+    _outgoing_mutex = xSemaphoreCreateMutex();
+    if (_outgoing_mutex == nullptr) {
+        return core::Result::Failure(core::ErrorCode::InternalError, "Failed to create outgoing queue mutex");
+    }
+
     setvbuf(stdin, nullptr, _IONBF, 0);
 
     const int stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
@@ -79,12 +84,23 @@ core::Result JsonLineTransport::queue_outgoing_line(std::string line) {
         line.push_back('\n');
     }
 
-    if (_outgoing_lines.size() >= _config.max_outgoing_queue) {
-        return core::Result::Failure(core::ErrorCode::QueueFull, "Outgoing queue is full");
+    if (_outgoing_mutex == nullptr) {
+        return core::Result::Failure(core::ErrorCode::InternalError, "Outgoing queue mutex missing");
     }
 
-    _outgoing_lines.push_back(std::move(line));
-    return core::Result::Success();
+    if (xSemaphoreTake(_outgoing_mutex, 0) != pdTRUE) {
+        return core::Result::Failure(core::ErrorCode::Busy, "Outgoing queue busy");
+    }
+
+    core::Result result = core::Result::Success();
+    if (_outgoing_lines.size() >= _config.max_outgoing_queue) {
+        result = core::Result::Failure(core::ErrorCode::QueueFull, "Outgoing queue is full");
+    } else {
+        _outgoing_lines.push_back(std::move(line));
+    }
+
+    xSemaphoreGive(_outgoing_mutex);
+    return result;
 }
 
 void JsonLineTransport::drain_rx() {
@@ -92,7 +108,7 @@ void JsonLineTransport::drain_rx() {
     char chunk[128];
 
     while (total_read < _config.max_rx_bytes_per_poll) {
-        const std::size_t request_size = std::min(sizeof(chunk), _config.max_rx_bytes_per_poll - total_read);
+        const std::size_t request_size = std::min(static_cast<size_t>(sizeof(chunk)), _config.max_rx_bytes_per_poll - total_read);
         const ssize_t read_bytes = ::read(STDIN_FILENO, chunk, request_size);
 
         if (read_bytes <= 0) {
@@ -153,12 +169,23 @@ void JsonLineTransport::drain_rx() {
 void JsonLineTransport::drain_tx() {
     while (true) {
         if (_active_tx_line.empty()) {
-            if (_outgoing_lines.empty()) {
+            if (_outgoing_mutex == nullptr) {
                 return;
             }
+
+            if (xSemaphoreTake(_outgoing_mutex, 0) != pdTRUE) {
+                return;
+            }
+
+            if (_outgoing_lines.empty()) {
+                xSemaphoreGive(_outgoing_mutex);
+                return;
+            }
+
             _active_tx_line = std::move(_outgoing_lines.front());
             _outgoing_lines.pop_front();
             _active_tx_offset = 0;
+            xSemaphoreGive(_outgoing_mutex);
         }
 
         const char* write_ptr = _active_tx_line.data() + _active_tx_offset;
