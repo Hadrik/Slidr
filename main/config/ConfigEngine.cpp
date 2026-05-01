@@ -141,7 +141,7 @@ bool ConfigEngine::validate_component_entry(const JsonObjectConst& component, st
         error_message = "Component entry missing required string field 'type'";
         return false;
     }
-    if (!component["options"].is<JsonObject>()) {
+    if (!component["options"].is<JsonObjectConst>()) {
         error_message = "Component entry missing required object field 'options'";
         return false;
     }

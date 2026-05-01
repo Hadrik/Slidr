@@ -89,6 +89,26 @@ Response payload:
 }
 ```
 
+### config.save
+Request payload:
+
+```json
+{
+  "path": "/config/new_config.json"
+}
+```
+
+`path` is optional. Default path is `/config/config.json`.
+
+Response payload:
+
+```json
+{
+  "path": "/config/new_config.json",
+  "saved": true
+}
+```
+
 ### config.apply_full
 Request payload:
 

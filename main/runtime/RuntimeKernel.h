@@ -23,6 +23,7 @@ public:
 private:
     void register_default_schemas();
     void register_default_handlers();
+    core::Result get_config_from_filesystem(std::string& out_config_json);
 
     communication::MessageGateway _gateway;
     communication::FileTransferManager _transfer_manager;
@@ -30,6 +31,8 @@ private:
     services::FilesystemService _filesystem;
     std::function<void(std::string)> _event_sink;
     bool _initialized = false;
+
+    static constexpr const char* kConfigPath = "/config/config.json";
 };
 
 }  // namespace slidr::runtime

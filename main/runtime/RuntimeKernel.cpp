@@ -4,6 +4,7 @@
 
 #include "config/ConfigSchema.h"
 #include "esp_log.h"
+#include "RuntimeKernel.h"
 
 namespace {
 constexpr const char* kTag = "RuntimeKernel";
@@ -58,7 +59,25 @@ void RuntimeKernel::initialize() {
 }
 )json";
 
-    (void) _config_engine.load_desired_config_from_json(kBootstrapConfig);
+    std::string config_json;
+    const core::Result config_result = get_config_from_filesystem(config_json);
+    const auto load_default = [&]() {
+        const core::Result load_result = _config_engine.load_desired_config_from_json(kBootstrapConfig);
+        if (!load_result.ok()) {
+            ESP_LOGE(kTag, "Failed to load bootstrap config: %s", load_result.message.c_str());
+        }
+    };
+    if (config_result.ok()) {
+        const core::Result load_result = _config_engine.load_desired_config_from_json(config_json);
+        if (!load_result.ok()) {
+            ESP_LOGW(kTag, "Failed to load config from filesystem, loading bootstrap config: %s", load_result.message.c_str());
+            load_default();
+        }
+    } else {
+        ESP_LOGW(kTag, "Loading bootstrap config: %s", config_result.message.c_str());
+        load_default();
+    }
+
     _initialized = true;
 }
 
@@ -143,6 +162,35 @@ void RuntimeKernel::register_default_handlers() {
         }
 
         response_payload["document"] = desired.as<JsonVariantConst>();
+        return core::Result::Success();
+    });
+
+    _gateway.register_handler("config.save", [this](const JsonObjectConst& payload, JsonDocument& response_payload) {
+        if (!_filesystem.ready()) {
+            return core::Result::Failure(core::ErrorCode::FileSystemUnavailable, "Filesystem not ready");
+        }
+        
+        JsonDocument config;
+        const core::Result result = _config_engine.get_desired_config(config);
+        if (!result.ok()) {
+            return result;
+        }
+
+        std::string config_json;
+        serializeJson(config, config_json);
+
+        std::string path = kConfigPath;
+        if (payload["path"].is<const char*>()) {
+            path = payload["path"].as<std::string>();
+        }
+
+        const core::Result write_result = _filesystem.write_text_file_atomic(path, config_json);
+        if (!write_result.ok()) {
+            return core::Result::Failure(core::ErrorCode::FileSystemError, "Failed to write config to filesystem: " + write_result.message);
+        }
+
+        response_payload["saved"] = true;
+        response_payload["path"] = path;
         return core::Result::Success();
     });
 
@@ -417,6 +465,20 @@ void RuntimeKernel::register_default_handlers() {
         response_payload["completed"] = true;
         return core::Result::Success();
     });
+}
+
+core::Result RuntimeKernel::get_config_from_filesystem(std::string& out_config_json) {
+    if (!_filesystem.ready()) {
+        return core::Result::Failure(core::ErrorCode::FileSystemUnavailable, "Filesystem not ready");
+    }
+
+    const core::Result result = _filesystem.read_text_file(kConfigPath, out_config_json);
+    if (!result.ok()) {
+        ESP_LOGW(kTag, "Failed to read config from filesystem: %s", result.message.c_str());
+        return core::Result::Failure(core::ErrorCode::FileNotFound, "Failed to read config from filesystem");
+    }
+
+    return core::Result::Success();
 }
 
 }  // namespace slidr::runtime
